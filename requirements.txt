@@ -1,0 +1,5 @@
+# Backend dependencies
+-r backend/requirements.txt
+
+# Additional dependencies for desktop app
+pywebview==6.0
