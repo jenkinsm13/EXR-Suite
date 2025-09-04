@@ -16,48 +16,16 @@ import { useAppStore, useCurrentDirectory, useSelectedFiles } from '../stores/ap
 
 // Thumbnail component for EXR files
 const Thumbnail: React.FC<{ filePath: string; size?: number }> = ({ filePath, size = 200 }) => {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [imgError, setImgError] = useState(false);
 
-  React.useEffect(() => {
-    let isMounted = true;
-    
-    const loadThumbnail = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        
-        // Use a timeout to prevent blocking the UI
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), 5000)
-        );
-        
-        const thumbnailPromise = apiClient.getThumbnail(filePath, size);
-        
-        const url = await Promise.race([thumbnailPromise, timeoutPromise]) as string;
-        
-        if (isMounted) {
-          setImageUrl(url);
-          setIsLoading(false);
-        }
-      } catch (err: any) {
-        if (isMounted) {
-          setError(err.message);
-          setIsLoading(false);
-        }
-      }
-    };
+  const { data: imageUrl, isPending, isError } = useQuery({
+    queryKey: ['thumbnail', filePath, size],
+    queryFn: ({ signal }) => apiClient.getThumbnail(filePath, size, signal),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: false,
+  });
 
-    // Load thumbnail in background
-    loadThumbnail();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [filePath, size]);
-
-  // Cleanup on unmount
   React.useEffect(() => {
     return () => {
       if (imageUrl && imageUrl.startsWith('blob:')) {
@@ -66,28 +34,39 @@ const Thumbnail: React.FC<{ filePath: string; size?: number }> = ({ filePath, si
     };
   }, [imageUrl]);
 
-  if (isLoading) {
+  // Placeholder for loading state
+  if (isPending) {
     return (
-      <div className="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center">
+      <div
+        className="bg-gray-700 rounded-lg flex items-center justify-center"
+        style={{ width: size, height: size }}
+      >
         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-exr-accent"></div>
       </div>
     );
   }
 
-  if (error) {
+  // Error placeholder
+  if (isError || imgError) {
     return (
-      <div className="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center">
+      <div
+        className="bg-gray-700 rounded-lg flex items-center justify-center"
+        style={{ width: size, height: size }}
+      >
         <PhotoIcon className="w-8 h-8 text-gray-400" />
       </div>
     );
   }
 
+  // Render image preserving aspect ratio within the requested size
   return (
     <img
       src={imageUrl!}
       alt="Thumbnail"
-      className="w-16 h-16 object-cover rounded-lg"
-      onError={() => setError('Failed to load thumbnail')}
+      style={{ maxWidth: size, maxHeight: size }}
+      className="rounded-lg"
+      loading="lazy"
+      onError={() => setImgError(true)}
     />
   );
 };
