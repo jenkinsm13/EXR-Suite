@@ -74,16 +74,35 @@ class ApiClientImpl implements ApiClient {
   }
 
   // Images API
-  async getThumbnail(filePath: string, size: number = 200): Promise<string> {
+  async getThumbnail(filePath: string, size: number = 200, signal?: AbortSignal): Promise<string> {
     const params = `?size=${size}&format=PNG`;
-    const response = await fetch(`${API_BASE_URL}/images/thumbnail/${encodeURIComponent(filePath)}${params}`);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+    // Combine provided signal with an internal timeout for better responsiveness
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const onAbort = () => controller.abort();
+    if (signal) {
+      signal.addEventListener('abort', onAbort);
     }
 
-    const blob = await response.blob();
-    return URL.createObjectURL(blob);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/images/thumbnail/${encodeURIComponent(filePath)}${params}`,
+        { signal: controller.signal }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } finally {
+      clearTimeout(timeoutId);
+      if (signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+    }
   }
 
   async getPreview(filePath: string, format: string = 'PNG'): Promise<string> {
